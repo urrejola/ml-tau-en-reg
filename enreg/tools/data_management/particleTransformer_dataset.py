@@ -52,6 +52,14 @@ def load_row_groups(filename):
     return row_groups
 
 
+def _field(data: ak.Array, *names):
+    """Return the first matching branch (supports old and new parquet schemas)."""
+    for name in names:
+        if name in data.fields:
+            return data[name]
+    raise KeyError(f"None of {names} found in parquet fields: {list(data.fields)}")
+
+
 class RowGroup:
     def __init__(self, filename, row_group, num_rows):
         self.filename = filename
@@ -68,9 +76,18 @@ class ParticleTransformerDataset(IterableDataset):
         print(f"There are {'{:,}'.format(self.num_rows)} jets in the dataset.")
 
     def build_tensors(self, data: ak.Array):
-        jet_constituent_p4s = g.reinitialize_p4(data.reco_cand_p4s)
-        gen_jet_tau_p4s = g.reinitialize_p4(data.gen_jet_tau_p4s)
-        jet_p4s = g.reinitialize_p4(data.reco_jet_p4s)
+        # Schema aliases: old Fuτure names vs ml-tau-model / rare-decay parquets
+        reco_cand_p4s = _field(data, "reco_cand_p4s")
+        reco_jet_p4 = _field(data, "reco_jet_p4s", "reco_jet_p4")
+        gen_jet_tau_p4 = _field(data, "gen_jet_tau_p4s", "gen_jet_tau_p4")
+        reco_cand_charge = _field(data, "reco_cand_charge", "reco_cand_charges")
+        reco_cand_pdg = _field(data, "reco_cand_pdg", "reco_cand_pdgs")
+        reco_cand_dz_err = _field(data, "reco_cand_dz_err", "reco_cand_dz_error")
+        reco_cand_dxy_err = _field(data, "reco_cand_dxy_err", "reco_cand_dxy_error")
+
+        jet_constituent_p4s = g.reinitialize_p4(reco_cand_p4s)
+        gen_jet_tau_p4s = g.reinitialize_p4(gen_jet_tau_p4)
+        jet_p4s = g.reinitialize_p4(reco_jet_p4)
 
         #ParticleTransformer features from https://arxiv.org/pdf/2202.03772, table 2
         cand_ParT_features = ak.Array({
@@ -81,12 +98,12 @@ class ParticleTransformerDataset(IterableDataset):
             "cand_logptrel": np.log(jet_constituent_p4s.pt / jet_p4s.pt),
             "cand_logerel": np.log(jet_constituent_p4s.energy / jet_p4s.energy),
             "cand_deltaR": f.deltaR_etaPhi(jet_constituent_p4s.eta, jet_constituent_p4s.phi, jet_p4s.eta, jet_p4s.phi),
-            "cand_charge": data.reco_cand_charge,
-            "isElectron": ak.values_astype(abs(data.reco_cand_pdg) == 11, np.float32),
-            "isMuon": ak.values_astype(abs(data.reco_cand_pdg) == 13, np.float32),
-            "isPhoton": ak.values_astype(abs(data.reco_cand_pdg) == 22, np.float32),
-            "isChargedHadron": ak.values_astype(abs(data.reco_cand_pdg) == 211, np.float32),
-            "isNeutralHadron": ak.values_astype(abs(data.reco_cand_pdg) == 130, np.float32),
+            "cand_charge": reco_cand_charge,
+            "isElectron": ak.values_astype(abs(reco_cand_pdg) == 11, np.float32),
+            "isMuon": ak.values_astype(abs(reco_cand_pdg) == 13, np.float32),
+            "isPhoton": ak.values_astype(abs(reco_cand_pdg) == 22, np.float32),
+            "isChargedHadron": ak.values_astype(abs(reco_cand_pdg) == 211, np.float32),
+            "isNeutralHadron": ak.values_astype(abs(reco_cand_pdg) == 130, np.float32),
         })
 
         omni_features_wPID = ak.Array({
@@ -94,12 +111,12 @@ class ParticleTransformerDataset(IterableDataset):
             "part_mass": jet_constituent_p4s.mass,
             "part_etarel": f.deltaEta(jet_constituent_p4s.eta, jet_p4s.eta),
             "part_phirel": f.deltaPhi(jet_constituent_p4s.phi, jet_p4s.phi),
-            "part_charge": data.reco_cand_charge,
-            "part_isElectron": ak.values_astype(abs(data.reco_cand_pdg) == 11, np.float32),
-            "part_isMuon": ak.values_astype(abs(data.reco_cand_pdg) == 13, np.float32),
-            "part_isPhoton": ak.values_astype(abs(data.reco_cand_pdg) == 22, np.float32),
-            "part_isChargedHadron": ak.values_astype(abs(data.reco_cand_pdg) == 211, np.float32),
-            "part_isNeutralHadron": ak.values_astype(abs(data.reco_cand_pdg) == 130, np.float32),
+            "part_charge": reco_cand_charge,
+            "part_isElectron": ak.values_astype(abs(reco_cand_pdg) == 11, np.float32),
+            "part_isMuon": ak.values_astype(abs(reco_cand_pdg) == 13, np.float32),
+            "part_isPhoton": ak.values_astype(abs(reco_cand_pdg) == 22, np.float32),
+            "part_isChargedHadron": ak.values_astype(abs(reco_cand_pdg) == 211, np.float32),
+            "part_isNeutralHadron": ak.values_astype(abs(reco_cand_pdg) == 130, np.float32),
         })
 
         #raw particle kinematics, for LorentzNet and ParticleTransformer (attention matrix calculation)
@@ -113,9 +130,9 @@ class ParticleTransformerDataset(IterableDataset):
         #additional track lifetime variables
         cand_lifetimes = ak.Array({
             "cand_dz": data.reco_cand_dz,
-            "cand_dz_err": data.reco_cand_dz_err,
+            "cand_dz_err": reco_cand_dz_err,
             "cand_dxy": data.reco_cand_dxy,
-            "cand_dxy_err": data.reco_cand_dxy_err
+            "cand_dxy_err": reco_cand_dxy_err
         })
 
         # Kinematic variables for the OmniJet
@@ -139,16 +156,18 @@ class ParticleTransformerDataset(IterableDataset):
 
         node_mask_tensors = torch.unsqueeze(
             torch.tensor(
-                ak.to_numpy(ak.fill_none(ak.pad_none(ak.ones_like(data.reco_cand_pdg), self.cfg.max_cands, clip=True), 0,)),
+                ak.to_numpy(ak.fill_none(ak.pad_none(ak.ones_like(reco_cand_pdg), self.cfg.max_cands, clip=True), 0,)),
                 dtype=torch.bool
             ),
             dim=1
         )
 
-        if not "weight" in data.fields:
-            weight_tensors = torch.tensor(ak.ones_like(data.gen_jet_tau_decaymode), dtype=torch.float32)
-        else:
+        if "weight" in data.fields:
             weight_tensors = torch.tensor(ak.to_numpy(data.weight), dtype=torch.float32)
+        elif "cls_weight" in data.fields:
+            weight_tensors = torch.tensor(ak.to_numpy(data.cls_weight), dtype=torch.float32)
+        else:
+            weight_tensors = torch.tensor(ak.ones_like(data.gen_jet_tau_decaymode), dtype=torch.float32)
 
         reco_jet_pt = torch.tensor(ak.to_numpy(jet_p4s.pt), dtype=torch.float32)
         gen_tau_pt = torch.tensor(ak.to_numpy(gen_jet_tau_p4s.pt), dtype=torch.float32)
@@ -204,7 +223,7 @@ class ParticleTransformerDataset(IterableDataset):
         for row_group in row_groups_to_process:
             #load one chunk from one file
             data = ak.from_parquet(row_group.filename, row_groups=[row_group.row_group])
-            reco_jet_p4s = g.reinitialize_p4(data.reco_jet_p4s)
+            reco_jet_p4s = g.reinitialize_p4(_field(data, "reco_jet_p4s", "reco_jet_p4"))
             data = data[reco_jet_p4s.pt >= self.reco_jet_pt_cut]
             tensors = self.build_tensors(data)
 
