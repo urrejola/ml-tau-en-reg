@@ -4,6 +4,7 @@ import json
 import vector
 import numpy as np
 import awkward as ak
+from collections import Counter
 
 
 # def load_all_data(input_loc: str | list, n_files: int = None, columns: list = None) -> ak.Array:
@@ -167,6 +168,81 @@ def get_reduced_decaymodes(decaymodes: np.array):
         16: 16,
     }
     return np.vectorize(target_mapping.get)(decaymodes)
+
+
+# Tier A dm_multiclass labels from truth daughters (0..9). Not the parquet rare/usual ID columns.
+TIER_A_CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+TIER_A_CLASS_NAMES = [
+    "pi",           # 0
+    "pi_pi0",       # 1
+    "pi_ge2pi0",    # 2
+    "3pi",          # 3
+    "3pi_ge1pi0",   # 4
+    "K",            # 5
+    "K_pi0",        # 6
+    "Kpipi",        # 7
+    "pi_K0",        # 8
+    "other",        # 9
+]
+
+
+def classify_tau_decay_tierA(pdgs):
+    """Map one jet's gen_jet_tau_vis_daughter_pdgs list -> Tier A class id 0..9."""
+    c = Counter(pdgs or [])
+    n_pi = c[211] + c[-211]
+    n_K = c[321] + c[-321]
+    n_pi0 = c[111]
+    n_K0 = c[130] + c[310] + c[311] + c[-311]
+    n_g = c[22]
+    n_eta = c[221]
+    n_omega = c[223]
+    n_Kstar = c[323] + c[-323]
+    known = {
+        211, -211, 321, -321, 111, 130, 310, 311, -311, 22, 221, 223, 323, -323,
+        11, -11, 13, -13, 12, 14, 16, -16,
+    }
+    n_other = sum(n for p, n in c.items() if p not in known)
+
+    has_strange_charged = n_K > 0
+    has_K0 = n_K0 > 0
+    has_strange = has_strange_charged or has_K0 or n_Kstar > 0
+    has_exotic = (n_eta + n_omega + n_g + n_other) > 0
+
+    # Exclusive pion modes (no K / K0 / exotic)
+    if not has_strange and not has_exotic:
+        if n_pi == 1 and n_pi0 == 0:
+            return 0
+        if n_pi == 1 and n_pi0 == 1:
+            return 1
+        if n_pi == 1 and n_pi0 >= 2:
+            return 2
+        if n_pi == 3 and n_pi0 == 0:
+            return 3
+        if n_pi == 3 and n_pi0 >= 1:
+            return 4
+        return 9
+
+    # Exclusive charged-kaon modes
+    if n_K == 1 and n_pi == 0 and n_pi0 == 0 and not has_K0 and not has_exotic:
+        return 5
+    if n_K == 1 and n_pi == 0 and n_pi0 == 1 and not has_K0 and not has_exotic:
+        return 6
+    if n_K == 1 and n_pi == 2 and n_pi0 == 0 and not has_K0 and not has_exotic:
+        return 7  # Kππ; KKπ goes to other
+
+    # 1-prong + neutral kaon(s)
+    if n_pi == 1 and has_K0 and not has_strange_charged and not has_exotic:
+        return 8
+
+    return 9
+
+
+def classify_tau_decay_tierA_batch(daughter_pdgs_list):
+    """Classify a list/array of per-jet daughter PDG lists -> np.ndarray of class ids."""
+    return np.asarray(
+        [classify_tau_decay_tierA(pdgs) for pdgs in daughter_pdgs_list],
+        dtype=np.int64,
+    )
 
 
 def prepare_one_hot_encoding(values, classes=[0, 1, 2, 10, 11, 15]):

@@ -73,7 +73,7 @@ dataset:
 
 #number of output classes for different tasks
 num_classes:
-    dm_multiclass: 6 # Changed from 16
+    dm_multiclass: 10  # Tier A (daughter-PDG labels); was 6 for classic HPS reduced
     jet_regression: 1
     binary_classification: 2
 

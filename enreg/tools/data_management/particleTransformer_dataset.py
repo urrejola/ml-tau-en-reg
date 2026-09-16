@@ -173,10 +173,20 @@ class ParticleTransformerDataset(IterableDataset):
         gen_tau_pt = torch.tensor(ak.to_numpy(gen_jet_tau_p4s.pt), dtype=torch.float32)
 
         jet_regression_target = torch.log(gen_tau_pt/reco_jet_pt)
-        gen_jet_tau_decaymode = ak.to_numpy(data.gen_jet_tau_decaymode)
-        reduced_gen_decay_modes = g.get_reduced_decaymodes(gen_jet_tau_decaymode)
-        ohe_prepared_decay_modes = g.prepare_one_hot_encoding(reduced_gen_decay_modes)
-        gen_jet_tau_decaymode_reduced = torch.tensor(ohe_prepared_decay_modes).long()
+
+        # dm_multiclass: Tier A from truth daughters (not parquet usual/rare ID columns)
+        if "gen_jet_tau_vis_daughter_pdgs" in data.fields:
+            tier_a = g.classify_tau_decay_tierA_batch(
+                data.gen_jet_tau_vis_daughter_pdgs.to_list()
+            )
+            # classes are already 0..9 == model output indices
+            gen_jet_tau_decaymode_reduced = torch.tensor(tier_a, dtype=torch.long)
+        else:
+            # fallback for older parquets without daughter lists
+            gen_jet_tau_decaymode = ak.to_numpy(data.gen_jet_tau_decaymode)
+            reduced_gen_decay_modes = g.get_reduced_decaymodes(gen_jet_tau_decaymode)
+            ohe_prepared_decay_modes = g.prepare_one_hot_encoding(reduced_gen_decay_modes)
+            gen_jet_tau_decaymode_reduced = torch.tensor(ohe_prepared_decay_modes).long()
 
         gen_jet_tau_decaymode_exists = (torch.tensor(ak.to_numpy(data.gen_jet_tau_decaymode)) != -1).long()
 
