@@ -11,12 +11,12 @@ comet:
 #override these using command line args
 output_dir: training-outputs/240809_3var_kinematics
 # data_path: /scratch/persistent/laurits/ml-tau/20241002_Training_ntuples_geq20gev
-data_path: /scratch/project_465001293/mltau-data/v2
+data_path: /data/user/urrejola/future_dataset/taus
 
 #override this using command line args
-training_type: dm_multiclass
+# training_type: dm_multiclass
 # training_type: energy_regression
-# training_type: binary_classification
+training_type: binary_classification
 
 #override this using command line args
 model_type: ParticleTransformer
@@ -26,14 +26,14 @@ model_type: ParticleTransformer
 #these samples can be used for training and validation
 #qq is added back using command line flags for the binary classification task
 training_samples:
-    - z_train.parquet
-    #  - zh_train.parquet
+    # - z_train.parquet
+    - zh_train.parquet
     - qq_train.parquet
 
 #these are never used in the training code, only for the final evaluation
 test_samples:
-    - z_test.parquet
-    #  - zh_test.parquet
+    # - z_test.parquet
+    - zh_test.parquet
     - qq_test.parquet
 
 #the training sample will be further subdividied as follows to train and valid

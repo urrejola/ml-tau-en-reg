@@ -1,0 +1,9 @@
+/user/u/urrejola/.conda/envs/pytorch_gpu/lib/python3.10/site-packages/stringcolor/main.py:11: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Error executing job with overrides: ['output_dir=training-outputs/gpu_test', '+fraction_train=0.2', 'fraction_valid=0.2', 'training.num_epochs=2', 'model_type=ParticleTransformer', 'training_type=binary_classification', 'data_path=/data/user/urrejola/future_dataset/taus/']
+Traceback (most recent call last):
+  File "/user/u/urrejola/TauFCC/ml-tau-en-reg/enreg/scripts/trainModel.py", line 310, in trainModel
+    raise Exception("Output directory exists while train=True: {}".format(model_output_path))
+Exception: Output directory exists while train=True: training-outputs/gpu_test/binary_classification/ParticleTransformer
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
