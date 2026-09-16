@@ -1,5 +1,7 @@
 import torch
 import math
+import os
+import glob
 import numpy as np
 import awkward as ak
 import enreg.tools.general as g
@@ -22,10 +24,32 @@ def stack_and_pad_features(cand_features, max_cands):
 
 
 def load_row_groups(filename):
-    metadata = ak.metadata_from_parquet(filename)
-    num_row_groups = metadata["num_row_groups"]
-    col_counts = metadata["col_counts"]
-    return [RowGroup(filename, row_group, col_counts[row_group]) for row_group in range(num_row_groups)]
+    """Load row-group metadata from one parquet file or a glob pattern.
+
+    Examples:
+        /path/to/z_train.parquet
+        /path/to/z_train_*.parquet
+    """
+    if "*" in filename or "?" in filename:
+        input_files = sorted(glob.glob(filename))
+    elif os.path.isfile(filename):
+        input_files = [filename]
+    else:
+        raise FileNotFoundError(f"No parquet file(s) found for: {filename}")
+
+    if len(input_files) == 0:
+        raise FileNotFoundError(f"Glob matched no files: {filename}")
+
+    row_groups = []
+    for path in input_files:
+        metadata = ak.metadata_from_parquet(path)
+        num_row_groups = metadata["num_row_groups"]
+        col_counts = metadata["col_counts"]
+        row_groups.extend(
+            [RowGroup(path, row_group, col_counts[row_group]) for row_group in range(num_row_groups)]
+        )
+    print(f"load_row_groups: {len(input_files)} file(s), {len(row_groups)} row groups from {filename}")
+    return row_groups
 
 
 class RowGroup:
