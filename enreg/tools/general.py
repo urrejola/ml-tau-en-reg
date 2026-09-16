@@ -180,7 +180,10 @@ def one_hot_decoding(values, classes=[0, 1, 2, 10, 11, 15]):
 
 
 def reinitialize_p4(p4_obj: ak.Array):
-    """ Reinitialized the 4-momentum for particle in order to access its properties.
+    """Reinitialized the 4-momentum for particle in order to access its properties.
+
+    Ported from HEP-KBFI/ml-tau-model so both old cartesian (x,y,z,tau/t)
+    and new (pt,eta,phi,energy) parquet layouts work.
 
     Args:
         p4_obj : ak.Array
@@ -188,31 +191,46 @@ def reinitialize_p4(p4_obj: ak.Array):
 
     Returns:
         p4 : ak.Array
-            Particle with initialized 4-momenta.
+            Particle with initialized 4-momenta as (pt, eta, phi, energy).
     """
-    if "tau" in p4_obj.fields:
-        p4 = vector.awk(
-            ak.zip(
-                {
-                    "mass": p4_obj.tau,
-                    "x": p4_obj.x,
-                    "y": p4_obj.y,
-                    "z": p4_obj.z,
-                }
-            )
-        )
+    # Normalise field names (aliases → canonical).
+    name_map = {
+        "rho": "pt",
+        "x": "px",
+        "y": "py",
+        "z": "pz",
+        "t": "energy",
+        "e": "energy",
+        "tau": "mass",
+        "m": "mass",
+    }
+    renamed = {name_map.get(f, f): p4_obj[f] for f in p4_obj.fields}
+
+    # Pick the first complete non-redundant basis present in the data.
+    # Mixing cylindrical (pt) and Cartesian (px/py) triggers vector's
+    # "duplicate coordinates through momentum-aliases" error.
+    for basis in (
+        ("pt", "eta", "phi", "energy"),
+        ("pt", "eta", "phi", "mass"),
+        ("pt", "theta", "phi", "energy"),
+        ("pt", "theta", "phi", "mass"),
+        ("px", "py", "pz", "energy"),
+        ("px", "py", "pz", "mass"),
+    ):
+        if all(k in renamed for k in basis):
+            coords = {k: renamed[k] for k in basis}
+            break
     else:
-        p4 = vector.awk(
-            ak.zip(
-                {
-                    "energy": p4_obj.t,
-                    "x": p4_obj.x,
-                    "y": p4_obj.y,
-                    "z": p4_obj.z,
-                }
-            )
+        raise ValueError(
+            f"No supported 4-vector basis found in fields: {list(renamed)}"
         )
-    return p4
+
+    p4 = vector.awk(ak.zip(coords))
+    # Always return in (pt, eta, phi, energy) so downstream code can rely on
+    # these being stored fields, not just computed properties.
+    return vector.awk(
+        ak.zip({"pt": p4.pt, "eta": p4.eta, "phi": p4.phi, "energy": p4.energy})
+    )
 
 
 def load_json(path):
