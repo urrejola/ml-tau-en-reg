@@ -608,7 +608,11 @@ def trainModel(cfg: DictConfig) -> None:
                 "pred": preds,
                 "target": targets,
             }
-            ak.to_parquet(ak.Record({kind: data_to_save}), os.path.join(model_output_path, test_sample))
+            # Glob patterns (e.g. z_test*.parquet) are for loading only; strip wildcards for output name.
+            out_name = test_sample.replace("*", "").replace("?", "")
+            while "__" in out_name:
+                out_name = out_name.replace("__", "_")
+            ak.to_parquet(ak.Record({kind: data_to_save}), os.path.join(model_output_path, out_name))
 
 
 if __name__ == "__main__":

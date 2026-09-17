@@ -1,12 +1,15 @@
 #!/bin/bash
 #SBATCH -p gpu
 #SBATCH --gres=gpu:1
-#SBATCH -J dm_tierA_rare_v2
-#SBATCH -o /data/user/urrejola/output/out_dm_mc_Z_rare_v2_%j.txt
-#SBATCH -e /data/user/urrejola/output/err_dm_mc_Z_rare_v2_%j.txt
+#SBATCH -J dm_tierA_smoke
+#SBATCH -o /data/user/urrejola/output/out_dm_tierA_smoke_%j.txt
+#SBATCH -e /data/user/urrejola/output/err_dm_tierA_smoke_%j.txt
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=24
-#SBATCH --time=3:00:00
+#SBATCH --time=4:00:00
+
+# Short machinery test: rare Z shards, Tier A 10-class, few epochs, small trainSize.
+# Does not replace submit_gpu.slurm (full runs).
 
 export PYTHONUNBUFFERED=1
 export HYDRA_FULL_ERROR=1
@@ -18,29 +21,25 @@ export OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export CUDA_LAUNCH_BLOCKING=0
 export TORCH_CUDNN_BENCHMARK=1
 
-# Load cluster package helper, then enable cuda + anaconda (pass package name to use.sh)
 source /usr/local/etc/use.sh cuda
 source /usr/local/etc/use.sh anaconda
-# Enable conda activate/deactivate inside this non-interactive batch script
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate pytorch_gpu
 
 export KERAS_BACKEND=torch
 export PYTHONPATH=$(pwd):$(pwd)/enreg/omnijet_alpha:$PYTHONPATH
 
-# ~1h-scale: more jets (~39 RGs) + 10 epochs; new output_dir (old smoke dir must not be reused while train=True)
 ./run.sh enreg/scripts/trainModel.py \
-    output_dir=training-outputs/dm_multiclass_rare_v2 \
-    trainSize=40000 \
+    output_dir=training-outputs/dm_tierA_smoke_rareZ \
+    trainSize=20000 \
     fraction_valid=0.2 \
-    training.num_epochs=10 \
+    training.num_epochs=2 \
     training.batch_size=1024 \
     model_type=ParticleTransformer \
     training_type=dm_multiclass \
     data_path=/data/user/urrejola/20260824_rareDecaysDataset/ \
-    training_samples=[z_train*.parquet] \
-    test_samples=[z_test*.parquet] \
+    training_samples=['z_train_*.parquet'] \
+    test_samples=['z_test_*.parquet'] \
     dataset.feature_set=[cand_ParT_features]
-    # ^ paper-closest particle features (log pT/E, dEta/dPhi, charge, PID); px,py,pz,E still used via cand_kinematics for ParT attention
 
 conda deactivate
